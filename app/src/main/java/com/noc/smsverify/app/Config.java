@@ -7,7 +7,8 @@ public class Config
 {
     // server URL configuration
     public static final String URL_REQUEST_SMS = "http://192.168.0.105:8000/register/phone/";
-    public static final String URL_VERIFY_OTP = "http://192.168.0.101/android_sms/msg91/verify_otp.php";
+    public static final String URL_VERIFY_OTP = "http://192.168.0.105:8000/register/otp/";
+    public static final String URL_SUBMIT_CRED = "http://192.168.0.105:8000/register/credentials/";
 
     // SMS provider identification
     // It should match with your SMS gateway origin

@@ -14,4 +14,7 @@
     <string name="msg_manual_otp">(Enter the OTP below in case if we fail to detect the SMS automatically)</string>
     <string name="lbl_enter_otp">Enter OTP</string>
     <string name="lbl_submit">SUBMIT</string>
+
+
+    <string name="desc">App Logo</string>
 </resources>

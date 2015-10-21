@@ -1,8 +1,10 @@
 package com.noc.smsverify.activity;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -11,15 +13,12 @@ import android.support.v4.view.ViewPager;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
@@ -28,7 +27,7 @@ import com.noc.smsverify.R;
 import com.noc.smsverify.app.Config;
 import com.noc.smsverify.app.MyApplication;
 import com.noc.smsverify.helper.PrefManager;
-import com.noc.smsverify.service.HttpService;
+import com.noc.smsverify.receiver.SmsReceiver;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -44,15 +43,14 @@ public class SmsActivity extends Activity implements View.OnClickListener
     private static String TAG = SmsActivity.class.getSimpleName();
 
     private ViewPager viewPager;
-    private ViewPagerAdapter adapter;
-    private Button btnRequestSms, btnVerifyOtp;
-    //private EditText inputName, inputEmail;
-    private EditText inputMobile, inputOtp;
+    private EditText inputMobile, inputName, inputEmail;
+    private static EditText inputOtp;
     private ProgressBar progressBar;
     private PrefManager pref;
-    private ImageButton btnEditMobile;
     private TextView txtEditMobile;
     private LinearLayout layoutEditMobile;
+
+    private static Context mContext;
 
     @Override
     protected void onCreate (Bundle savedInstanceState)
@@ -61,20 +59,18 @@ public class SmsActivity extends Activity implements View.OnClickListener
         setContentView(R.layout.activity_sms);
 
         viewPager = (ViewPager) findViewById(R.id.viewPagerVertical);
-        //inputName = (EditText) findViewById(R.id.inputName);
-        //inputEmail = (EditText) findViewById(R.id.inputEmail);
         inputMobile = (EditText) findViewById(R.id.inputMobile);
         inputOtp = (EditText) findViewById(R.id.inputOtp);
-        btnRequestSms = (Button) findViewById(R.id.btn_request_sms);
-        btnVerifyOtp = (Button) findViewById(R.id.btn_verify_otp);
+        inputName = (EditText) findViewById(R.id.inputName);
+        inputEmail = (EditText) findViewById(R.id.inputEmail);
         progressBar = (ProgressBar) findViewById(R.id.progressBar);
-        btnEditMobile = (ImageButton) findViewById(R.id.btn_edit_mobile);
         txtEditMobile = (TextView) findViewById(R.id.txt_edit_mobile);
         layoutEditMobile = (LinearLayout) findViewById(R.id.layout_edit_mobile);
 
-        btnEditMobile.setOnClickListener(this);
-        btnRequestSms.setOnClickListener(this);
-        btnVerifyOtp.setOnClickListener(this);
+        findViewById(R.id.btn_edit_mobile).setOnClickListener(this);
+        findViewById(R.id.btn_request_sms).setOnClickListener(this);
+        findViewById(R.id.btn_verify_otp).setOnClickListener(this);
+        findViewById(R.id.btn_submit_credentials).setOnClickListener(this);
 
         // hiding the edit mobile number
         layoutEditMobile.setVisibility(View.GONE);
@@ -84,14 +80,13 @@ public class SmsActivity extends Activity implements View.OnClickListener
         // Checking for user session if user is already logged in, take him to main activity
         if(pref.isLoggedIn())
         {
-            Intent intent = new Intent(SmsActivity.this, MainActivity.class);
+            Intent intent = new Intent(SmsActivity.this, HomeActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             startActivity(intent);
             finish();
         }
 
-        adapter = new ViewPagerAdapter();
-        viewPager.setAdapter(adapter);
+        viewPager.setAdapter(new ViewPagerAdapter());
         viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener()
         {
             @Override
@@ -110,14 +105,6 @@ public class SmsActivity extends Activity implements View.OnClickListener
 
             }
         });
-
-
-        /** Checking if the device is waiting for sms showing the user OTP screen */
-        if(pref.isWaitingForSms())
-        {
-            viewPager.setCurrentItem(1);
-            layoutEditMobile.setVisibility(View.VISIBLE);
-        }
     }
 
     @Override
@@ -126,7 +113,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
         switch(view.getId())
         {
             case R.id.btn_request_sms:
-                validateForm();
+                validateMobileForm();
                 break;
 
             case R.id.btn_verify_otp:
@@ -136,16 +123,17 @@ public class SmsActivity extends Activity implements View.OnClickListener
             case R.id.btn_edit_mobile:
                 viewPager.setCurrentItem(0);
                 layoutEditMobile.setVisibility(View.GONE);
-                pref.setIsWaitingForSms(false);
+                break;
+
+            case R.id.btn_submit_credentials:
+                submitcredentials();
                 break;
         }
     }
 
-    /* Validating user details form */
-    private void validateForm ()
+    /* Validating user mobile number form */
+    private void validateMobileForm ()
     {
-        //String name = inputName.getText().toString().trim();
-        //String email = inputEmail.getText().toString().trim();
         String mobile = inputMobile.getText().toString().trim();
 
         //getting MAC Id of device
@@ -153,24 +141,13 @@ public class SmsActivity extends Activity implements View.OnClickListener
         WifiInfo wInfo = wifiManager.getConnectionInfo();
         String mac = wInfo.getMacAddress();
 
-        // validating empty name and email
-        /*if(name.length() == 0 || email.length() == 0)
-        {
-            Toast.makeText(getApplicationContext(), "Please enter your details", Toast.LENGTH_SHORT).show();
-            return;
-        }*/
-
         // validating mobile number, it should be of 10 digits length
         if(isValidPhoneNumber(mobile))
         {
             // request for sms
             progressBar.setVisibility(View.VISIBLE);
 
-            // saving the mobile number in shared preferences
-            //pref.setMobileNumber(mobile);
-
             // requesting for sms
-            //requestForSMS(name, email, mobile, mac);
             requestForSMS(mobile, mac);
         }
         else
@@ -178,16 +155,11 @@ public class SmsActivity extends Activity implements View.OnClickListener
     }
 
     /* Method initiates the SMS request on the server
-     * @param  name    user_name
-     * @param  email   user_email_address
      * @param  mobile  user_mobile_number
      * @param  mac     user_mac_address */
-    //private void requestForSMS (final String name, final String email, final String mobile, final String mac)
     private void requestForSMS (final String mobile, final String mac)
     {
         final Map<String, String> params = new HashMap<>();
-        //params.put("name", name);
-        //params.put("email", email);
         params.put("mobile", mobile);
         params.put("mac", mac);
 
@@ -204,6 +176,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
                         try
                         {
                             JSONObject responseObj = new JSONObject(response);
+
                             // Parsing json object response response will be a json object
                             boolean error = responseObj.getBoolean("error");
                             String message = responseObj.getString("message");
@@ -211,13 +184,12 @@ public class SmsActivity extends Activity implements View.OnClickListener
                             // checking for error, if not error SMS is initiated device should receive it shortly
                             if(!error)
                             {
-                                // boolean flag saying device is waiting for sms
-                                pref.setIsWaitingForSms(true);
-
                                 // moving the screen to next pager item i.e otp screen
                                 viewPager.setCurrentItem(1);
                                 txtEditMobile.setText(pref.getMobileNumber());
                                 layoutEditMobile.setVisibility(View.VISIBLE);
+                                mContext = getApplicationContext();
+                                enableBroadcastReceiver();
 
                                 Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                             }
@@ -232,7 +204,6 @@ public class SmsActivity extends Activity implements View.OnClickListener
                             Toast.makeText(getApplicationContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
                             progressBar.setVisibility(View.GONE);
                         }
-
                     }
                 },
                 new Response.ErrorListener()
@@ -257,23 +228,187 @@ public class SmsActivity extends Activity implements View.OnClickListener
                 return params;
             }
         };
-
         // Adding request to request queue
         MyApplication.getInstance().addToRequestQueue(strReq);
+    }
+
+    public static void getOtpFromSMS (String SMSBody)
+    {
+        inputOtp.setText(SMSBody);
+        disableBroadcastReceiver();
+    }
+
+    public void enableBroadcastReceiver()
+    {
+        ComponentName receiver = new ComponentName(mContext, SmsReceiver.class);
+        PackageManager pm = mContext.getPackageManager();
+
+        pm.setComponentEnabledSetting(receiver,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP);
+        Toast.makeText(this, "Enabled broadcast receiver", Toast.LENGTH_SHORT).show();
+    }
+
+    public static void disableBroadcastReceiver ()
+    {
+        ComponentName receiver = new ComponentName(mContext, SmsReceiver.class);
+        PackageManager pm = mContext.getPackageManager();
+        pm.setComponentEnabledSetting(receiver,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP);
+        Toast.makeText(mContext, "Disabled broadcast receiver", Toast.LENGTH_SHORT).show();
     }
 
     /* sending the OTP to server and activating the user */
     private void verifyOtp ()
     {
-        String otp = inputOtp.getText().toString().trim();
+        final String otp = inputOtp.getText().toString().trim();
         if(!otp.isEmpty())
         {
-            Intent grapprIntent = new Intent(getApplicationContext(), HttpService.class);
-            grapprIntent.putExtra("otp", otp);
-            startService(grapprIntent);
+            StringRequest strReq = new StringRequest(
+                    Request.Method.POST,
+                    Config.URL_VERIFY_OTP,
+                    new Response.Listener<String>()
+                    {
+
+                        @Override
+                        public void onResponse (String response)
+                        {
+                            Log.d(TAG, response);
+                            try
+                            {
+                                JSONObject responseObj = new JSONObject(response);
+
+                                // Parsing json object response
+                                // response will be a json object
+                                String message = responseObj.getString("success");
+                                if(message.equals("404 not found"))
+                                {
+                                    disableBroadcastReceiver();
+                                    viewPager.setCurrentItem(2);
+                                    layoutEditMobile.setVisibility(View.GONE);
+                                    Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+                                }
+                                else
+                                {
+                                    Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+                                }
+                            }
+                            catch(JSONException e)
+                            {
+                                Toast.makeText(getApplicationContext(),
+                                        "Error: " + e.getMessage(),
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    },
+                    new Response.ErrorListener()
+                    {
+                        @Override
+                        public void onErrorResponse (VolleyError error)
+                        {
+                            Log.e(TAG, "Error: " + error.getMessage());
+                            Toast.makeText(getApplicationContext(),
+                                    error.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    })
+            {
+
+                @Override
+                protected Map<String, String> getParams ()
+                {
+                    Map<String, String> params = new HashMap<>();
+                    params.put("otp", otp);
+
+                    Log.e(TAG, "Posting params: " + params.toString());
+                    return params;
+                }
+
+            };
+
+            // Adding request to request queue
+            MyApplication.getInstance().addToRequestQueue(strReq);
         }
         else
             Toast.makeText(getApplicationContext(), "Please enter the OTP", Toast.LENGTH_SHORT).show();
+    }
+
+    private void submitcredentials ()
+    {
+        String name = inputName.getText().toString().trim();
+        String email = inputEmail.getText().toString().trim();
+
+        if(name.length() == 0 || !isvalid_email(email))
+        {
+            Toast.makeText(getApplicationContext(), "Please enter your details", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final Map<String, String> params = new HashMap<>();
+        params.put("name", name);
+        params.put("email", email);
+
+        StringRequest strReq = new StringRequest(
+                Request.Method.POST,
+                Config.URL_SUBMIT_CRED,
+                new Response.Listener<String>()
+                {
+                    //response from the server
+                    @Override
+                    public void onResponse (String response)
+                    {
+                        Log.d(TAG, response);
+                        try
+                        {
+                            JSONObject responseObj = new JSONObject(response);
+
+                            // Parsing json object response response will be a json object
+                            boolean error = responseObj.getBoolean("error");
+                            String message = responseObj.getString("success");
+
+                            // checking for error, if not error SMS is initiated device should receive it shortly
+                            if(!error)
+                            {
+                                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
+                                Intent intent = new Intent(SmsActivity.this, HomeActivity.class);
+                                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                                startActivity(intent);
+                                finish();
+                            }
+                            else
+                                Toast.makeText(getApplicationContext(), "Error: " + message, Toast.LENGTH_LONG).show();
+                        }
+                        catch(JSONException e)
+                        {
+                            Toast.makeText(getApplicationContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                            progressBar.setVisibility(View.GONE);
+                        }
+                    }
+                },
+                new Response.ErrorListener()
+                {
+                    @Override
+                    public void onErrorResponse (VolleyError error)
+                    {
+                        Log.e(TAG, "Error: " + error.getMessage());
+                        Toast.makeText(getApplicationContext(), error.getMessage(), Toast.LENGTH_SHORT).show();
+                        progressBar.setVisibility(View.GONE);
+                    }
+                }
+        )
+        {
+
+            /* Passing user parameters to our server
+             * @return*/
+            @Override
+            protected Map<String, String> getParams ()
+            {
+                Log.e(TAG, "Posting params: " + params.toString());
+                return params;
+            }
+        };
+        // Adding request to request queue
+        MyApplication.getInstance().addToRequestQueue(strReq);
     }
 
     /* Regex to validate the mobile number mobile number should be of 10 digits length
@@ -285,12 +420,20 @@ public class SmsActivity extends Activity implements View.OnClickListener
         return mobile.matches(regEx);
     }
 
+    private static boolean isvalid_email(String email)
+    {
+        String EMAIL_PATTERN ="^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@"
+                        + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
+
+        return email.matches(EMAIL_PATTERN);
+    }
+
     class ViewPagerAdapter extends PagerAdapter
     {
         @Override
         public int getCount ()
         {
-            return 2;
+            return 3;
         }
 
         @Override
@@ -310,8 +453,16 @@ public class SmsActivity extends Activity implements View.OnClickListener
                 case 1:
                     resId = R.id.layout_otp;
                     break;
+                case 2:
+                    resId = R.id.layout_credentials;
+                    break;
             }
             return findViewById(resId);
+        }
+
+        @Override
+        public void destroyItem(View container, int position, Object object) {
+            ((ViewPager) container).removeView((View) object);
         }
     }
 }
