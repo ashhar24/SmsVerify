@@ -42,13 +42,13 @@ public class SmsActivity extends Activity implements View.OnClickListener
 {
     private static String TAG = SmsActivity.class.getSimpleName();
 
-    private ViewPager viewPager;
+    private static ViewPager viewPager;
     private EditText inputMobile, inputName, inputEmail;
     private static EditText inputOtp;
     private ProgressBar progressBar;
     private PrefManager pref;
     private TextView txtEditMobile;
-    private LinearLayout layoutEditMobile;
+    private static LinearLayout layoutEditMobile;
 
     private static Context mContext;
 
@@ -236,6 +236,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
     {
         inputOtp.setText(SMSBody);
         disableBroadcastReceiver();
+        verifyOtp();
     }
 
     public void enableBroadcastReceiver()
@@ -260,7 +261,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
     }
 
     /* sending the OTP to server and activating the user */
-    private void verifyOtp ()
+    private static void verifyOtp ()
     {
         final String otp = inputOtp.getText().toString().trim();
         if(!otp.isEmpty())
@@ -287,16 +288,16 @@ public class SmsActivity extends Activity implements View.OnClickListener
                                     disableBroadcastReceiver();
                                     viewPager.setCurrentItem(2);
                                     layoutEditMobile.setVisibility(View.GONE);
-                                    Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
                                 }
                                 else
                                 {
-                                    Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
                                 }
                             }
                             catch(JSONException e)
                             {
-                                Toast.makeText(getApplicationContext(),
+                                Toast.makeText(mContext,
                                         "Error: " + e.getMessage(),
                                         Toast.LENGTH_LONG).show();
                             }
@@ -308,7 +309,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
                         public void onErrorResponse (VolleyError error)
                         {
                             Log.e(TAG, "Error: " + error.getMessage());
-                            Toast.makeText(getApplicationContext(),
+                            Toast.makeText(mContext,
                                     error.getMessage(), Toast.LENGTH_SHORT).show();
                         }
                     })
@@ -330,7 +331,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
             MyApplication.getInstance().addToRequestQueue(strReq);
         }
         else
-            Toast.makeText(getApplicationContext(), "Please enter the OTP", Toast.LENGTH_SHORT).show();
+            Toast.makeText(mContext, "Please enter the OTP", Toast.LENGTH_SHORT).show();
     }
 
     private void submitcredentials ()
