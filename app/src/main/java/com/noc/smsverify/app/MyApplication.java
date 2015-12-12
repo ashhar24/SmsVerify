@@ -7,27 +7,25 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.Volley;
 
-/**
+/*
  * Created by defoliate on 14-10-2015.
  */
 public class MyApplication extends Application
 {
     public static final String TAG = MyApplication.class.getSimpleName();
-
+    private static MyApplication mInstance;
     private RequestQueue mRequestQueue;
 
-    private static MyApplication mInstance;
+    public static synchronized MyApplication getInstance ()
+    {
+        return mInstance;
+    }
 
     @Override
     public void onCreate ()
     {
         super.onCreate();
         mInstance = this;
-    }
-
-    public static synchronized MyApplication getInstance ()
-    {
-        return mInstance;
     }
 
     public RequestQueue getRequestQueue ()

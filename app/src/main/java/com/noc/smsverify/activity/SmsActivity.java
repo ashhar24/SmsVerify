@@ -10,6 +10,7 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
+import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,6 +20,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
@@ -35,7 +37,7 @@ import org.json.JSONObject;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
+/*
  * Created by defoliate on 14-10-2015.
  */
 public class SmsActivity extends Activity implements View.OnClickListener
@@ -43,14 +45,138 @@ public class SmsActivity extends Activity implements View.OnClickListener
     private static String TAG = SmsActivity.class.getSimpleName();
 
     private static ViewPager viewPager;
-    private EditText inputMobile, inputName, inputEmail;
     private static EditText inputOtp;
+    private static LinearLayout layoutEditMobile;
+    private static Context mContext;
+    private static String client_id = "fhHqexqCk8z8HXi5K4ktdrN6sHxgIf4RR9efwk8I";
+    private static String client_secret = "BQnvVD12ZSFYydUJDODnJyVl7u5ylGj1jEavx9hKy13bRf89DPQmmsRkWh11jUejtYMn9p9ZucfIoWtXPOGgkGAw3vescl9yIS4jSqBybAewuF0QmTI64cfbpavMAqwG";
+    private EditText inputMobile, inputName, inputEmail;
     private ProgressBar progressBar;
     private PrefManager pref;
     private TextView txtEditMobile;
-    private static LinearLayout layoutEditMobile;
 
-    private static Context mContext;
+    public static void getOtpFromSMS (String SMSBody)
+    {
+        inputOtp.setText(SMSBody);
+        disableBroadcastReceiver();
+        verifyOtp();
+    }
+
+    public static void disableBroadcastReceiver ()
+    {
+        ComponentName receiver = new ComponentName(mContext, SmsReceiver.class);
+        PackageManager pm = mContext.getPackageManager();
+        pm.setComponentEnabledSetting(receiver,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP);
+        Toast.makeText(mContext, "Disabled broadcast receiver", Toast.LENGTH_SHORT).show();
+    }
+
+    /* sending the OTP to server and activating the user */
+    private static void verifyOtp ()
+    {
+        final String otp = inputOtp.getText().toString().trim();
+        if(!otp.isEmpty())
+        {
+            StringRequest strReq = new StringRequest(
+                    Request.Method.POST,
+                    Config.URL_VERIFY_OTP,
+                    new Response.Listener<String>()
+                    {
+
+                        @Override
+                        public void onResponse (String response)
+                        {
+                            Log.d(TAG, response);
+                            try
+                            {
+                                JSONObject responseObj = new JSONObject(response);
+                                Log.d(TAG, response);
+
+                                // Parsing json object response
+                                // response will be a json object
+                                String message = responseObj.getString("success");
+                                if(message.equals("404 not found"))
+                                {
+                                    disableBroadcastReceiver();
+                                    viewPager.setCurrentItem(2);
+                                    layoutEditMobile.setVisibility(View.GONE);
+                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
+                                }
+                                else
+                                {
+                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
+                                }
+                            }
+                            catch(JSONException e)
+                            {
+                                Toast.makeText(mContext,
+                                        "Error: " + e.getMessage(),
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    },
+                    new Response.ErrorListener()
+                    {
+                        @Override
+                        public void onErrorResponse (VolleyError error)
+                        {
+                            Log.e(TAG, "Error: " + error.getMessage());
+                            Toast.makeText(mContext,
+                                    error.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    })
+            {
+
+                @Override
+                protected Map<String, String> getParams ()
+                {
+                    Map<String, String> params = new HashMap<>();
+                    //params.put("otp", otp);
+                    params.put("grant_type", "password");
+                    params.put("username", "bahenchod");
+                    params.put("password", "poiuytrewq");
+
+                    Log.e(TAG, "Posting params: " + params.toString());
+                    return params;
+                }
+
+                @Override
+                public Map<String, String> getHeaders () throws AuthFailureError
+                {
+                    HashMap<String, String> params = new HashMap<>();
+                    String creds = client_id + ":" + client_secret;
+                    Log.d(TAG, "creds" + creds);
+                    String auth = "Basic " + Base64.encodeToString(creds.getBytes(), Base64.NO_WRAP);
+                    params.put("Authorization", auth);
+                    Log.d(TAG, "posting auth" + params.toString());
+                    return params;
+                }
+            };
+
+            // Adding request to request queue
+            MyApplication.getInstance().addToRequestQueue(strReq);
+        }
+        else
+            Toast.makeText(mContext, "Please enter the OTP", Toast.LENGTH_SHORT).show();
+    }
+
+    /* Regex to validate the mobile number mobile number should be of 10 digits length
+     * @param mobile
+     * @return */
+    private static boolean isValidPhoneNumber (String mobile)
+    {
+        String regEx = "^[0-9]{10}$";
+        return mobile.matches(regEx);
+    }
+
+    private static boolean isvalid_email (String email)
+    {
+        String EMAIL_PATTERN = "^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@"
+                + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
+
+        return email.matches(EMAIL_PATTERN);
+    }
 
     @Override
     protected void onCreate (Bundle savedInstanceState)
@@ -160,8 +286,8 @@ public class SmsActivity extends Activity implements View.OnClickListener
     private void requestForSMS (final String mobile, final String mac)
     {
         final Map<String, String> params = new HashMap<>();
-        params.put("mobile", mobile);
-        params.put("mac", mac);
+        params.put("phone", mobile);
+        //params.put("mac", mac);
 
         StringRequest strReq = new StringRequest(
                 Request.Method.POST,
@@ -178,23 +304,24 @@ public class SmsActivity extends Activity implements View.OnClickListener
                             JSONObject responseObj = new JSONObject(response);
 
                             // Parsing json object response response will be a json object
-                            boolean error = responseObj.getBoolean("error");
-                            String message = responseObj.getString("message");
+                            //boolean error = false;//= responseObj.getBoolean("error");
+                            String message = responseObj.getString("code");
 
                             // checking for error, if not error SMS is initiated device should receive it shortly
-                            if(!error)
-                            {
+                            //if(!error)
+                            //{
                                 // moving the screen to next pager item i.e otp screen
                                 viewPager.setCurrentItem(1);
-                                txtEditMobile.setText(pref.getMobileNumber());
+                                //txtEditMobile.setText(pref.getMobileNumber());
                                 layoutEditMobile.setVisibility(View.VISIBLE);
+                                txtEditMobile.setText(message);
                                 mContext = getApplicationContext();
                                 enableBroadcastReceiver();
 
                                 Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
-                            }
-                            else
-                                Toast.makeText(getApplicationContext(), "Error: " + message, Toast.LENGTH_LONG).show();
+                            //}
+                            //else
+                                //Toast.makeText(getApplicationContext(), "Error: " + message, Toast.LENGTH_LONG).show();
 
                             // hiding the progress bar
                             progressBar.setVisibility(View.GONE);
@@ -232,14 +359,7 @@ public class SmsActivity extends Activity implements View.OnClickListener
         MyApplication.getInstance().addToRequestQueue(strReq);
     }
 
-    public static void getOtpFromSMS (String SMSBody)
-    {
-        inputOtp.setText(SMSBody);
-        disableBroadcastReceiver();
-        verifyOtp();
-    }
-
-    public void enableBroadcastReceiver()
+    public void enableBroadcastReceiver ()
     {
         ComponentName receiver = new ComponentName(mContext, SmsReceiver.class);
         PackageManager pm = mContext.getPackageManager();
@@ -248,90 +368,6 @@ public class SmsActivity extends Activity implements View.OnClickListener
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 PackageManager.DONT_KILL_APP);
         Toast.makeText(this, "Enabled broadcast receiver", Toast.LENGTH_SHORT).show();
-    }
-
-    public static void disableBroadcastReceiver ()
-    {
-        ComponentName receiver = new ComponentName(mContext, SmsReceiver.class);
-        PackageManager pm = mContext.getPackageManager();
-        pm.setComponentEnabledSetting(receiver,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP);
-        Toast.makeText(mContext, "Disabled broadcast receiver", Toast.LENGTH_SHORT).show();
-    }
-
-    /* sending the OTP to server and activating the user */
-    private static void verifyOtp ()
-    {
-        final String otp = inputOtp.getText().toString().trim();
-        if(!otp.isEmpty())
-        {
-            StringRequest strReq = new StringRequest(
-                    Request.Method.POST,
-                    Config.URL_VERIFY_OTP,
-                    new Response.Listener<String>()
-                    {
-
-                        @Override
-                        public void onResponse (String response)
-                        {
-                            Log.d(TAG, response);
-                            try
-                            {
-                                JSONObject responseObj = new JSONObject(response);
-
-                                // Parsing json object response
-                                // response will be a json object
-                                String message = responseObj.getString("success");
-                                if(message.equals("404 not found"))
-                                {
-                                    disableBroadcastReceiver();
-                                    viewPager.setCurrentItem(2);
-                                    layoutEditMobile.setVisibility(View.GONE);
-                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
-                                }
-                                else
-                                {
-                                    Toast.makeText(mContext, message, Toast.LENGTH_LONG).show();
-                                }
-                            }
-                            catch(JSONException e)
-                            {
-                                Toast.makeText(mContext,
-                                        "Error: " + e.getMessage(),
-                                        Toast.LENGTH_LONG).show();
-                            }
-                        }
-                    },
-                    new Response.ErrorListener()
-                    {
-                        @Override
-                        public void onErrorResponse (VolleyError error)
-                        {
-                            Log.e(TAG, "Error: " + error.getMessage());
-                            Toast.makeText(mContext,
-                                    error.getMessage(), Toast.LENGTH_SHORT).show();
-                        }
-                    })
-            {
-
-                @Override
-                protected Map<String, String> getParams ()
-                {
-                    Map<String, String> params = new HashMap<>();
-                    params.put("otp", otp);
-
-                    Log.e(TAG, "Posting params: " + params.toString());
-                    return params;
-                }
-
-            };
-
-            // Adding request to request queue
-            MyApplication.getInstance().addToRequestQueue(strReq);
-        }
-        else
-            Toast.makeText(mContext, "Please enter the OTP", Toast.LENGTH_SHORT).show();
     }
 
     private void submitcredentials ()
@@ -412,23 +448,6 @@ public class SmsActivity extends Activity implements View.OnClickListener
         MyApplication.getInstance().addToRequestQueue(strReq);
     }
 
-    /* Regex to validate the mobile number mobile number should be of 10 digits length
-     * @param mobile
-     * @return */
-    private static boolean isValidPhoneNumber (String mobile)
-    {
-        String regEx = "^[0-9]{10}$";
-        return mobile.matches(regEx);
-    }
-
-    private static boolean isvalid_email(String email)
-    {
-        String EMAIL_PATTERN ="^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@"
-                        + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
-
-        return email.matches(EMAIL_PATTERN);
-    }
-
     class ViewPagerAdapter extends PagerAdapter
     {
         @Override
@@ -462,8 +481,9 @@ public class SmsActivity extends Activity implements View.OnClickListener
         }
 
         @Override
-        public void destroyItem(View container, int position, Object object) {
-            ((ViewPager) container).removeView((View) object);
+        public void destroyItem (ViewGroup container, int position, Object object)
+        {
+            container.removeView((View) object);
         }
     }
 }

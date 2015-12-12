@@ -5,26 +5,13 @@ import android.content.SharedPreferences;
 
 import java.util.HashMap;
 
-/**
+/*
  * Created by defoliate on 14-10-2015.
  */
 public class PrefManager
 {
-    // Shared Preferences
-    SharedPreferences pref;
-
-    // Editor for Shared preferences
-    SharedPreferences.Editor editor;
-
-    // Context
-    Context _context;
-
-    // Shared pref mode
-    int PRIVATE_MODE = 0;
-
     // Shared preferences file name
     private static final String PREF_NAME = "noc";
-
     // All Shared Preferences Keys
     private static final String KEY_IS_WAITING_FOR_SMS = "IsWaitingForSms";
     private static final String KEY_MOBILE_NUMBER = "mobile_number";
@@ -32,6 +19,14 @@ public class PrefManager
     private static final String KEY_NAME = "name";
     private static final String KEY_EMAIL = "email";
     private static final String KEY_MOBILE = "mobile";
+    // Shared Preferences
+    SharedPreferences pref;
+    // Editor for Shared preferences
+    SharedPreferences.Editor editor;
+    // Context
+    Context _context;
+    // Shared pref mode
+    int PRIVATE_MODE = 0;
 
     public PrefManager (Context context)
     {
@@ -51,15 +46,15 @@ public class PrefManager
         return pref.getBoolean(KEY_IS_WAITING_FOR_SMS, false);
     }
 
+    public String getMobileNumber ()
+    {
+        return pref.getString(KEY_MOBILE_NUMBER, null);
+    }
+
     public void setMobileNumber (String mobileNumber)
     {
         editor.putString(KEY_MOBILE_NUMBER, mobileNumber);
         editor.commit();
-    }
-
-    public String getMobileNumber ()
-    {
-        return pref.getString(KEY_MOBILE_NUMBER, null);
     }
 
     public void createLogin (String name, String email, String mobile)
